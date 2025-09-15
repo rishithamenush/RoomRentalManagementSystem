@@ -4,11 +4,26 @@ ini_set('display_errors', 1);
 
 class Auth {
     private $db;
+    // Cloudinary credentials (can be overridden by CLOUDINARY_URL env)
+    private $cloudinaryApiKey = '146229295188434';
+    private $cloudinaryApiSecret = 'KAX1kKOEXP3AOyr4KWfWdZIlID4';
+    private $cloudinaryCloudName = 'dguaflt7t';
 
     public function __construct() {
         ob_start();
         include '../config/db_connect.php';
         $this->db = $conn;
+
+        // Allow configuring via CLOUDINARY_URL env if set
+        $cloudinaryUrl = getenv('CLOUDINARY_URL');
+        if ($cloudinaryUrl) {
+            // Format: cloudinary://<api_key>:<api_secret>@<cloud_name>
+            if (preg_match("/cloudinary:\/\/(.*?):(.*?)@(.*)/", $cloudinaryUrl, $m)) {
+                $this->cloudinaryApiKey = $m[1];
+                $this->cloudinaryApiSecret = $m[2];
+                $this->cloudinaryCloudName = $m[3];
+            }
+        }
     }
 
     function __destruct() {
@@ -65,12 +80,56 @@ class Auth {
 
         $user_id = $this->db->insert_id;
 
+        // Handle file uploads (student ID)
+        $student_id_doc_path = '';
+        if ($role == 'student' && isset($_FILES['student_id_doc']) && $_FILES['student_id_doc']['error'] === UPLOAD_ERR_OK) {
+            $allowed_exts = ['jpg','jpeg','png'];
+            $max_size = 5 * 1024 * 1024; // 5MB
+            $orig_name = $_FILES['student_id_doc']['name'];
+            $size = $_FILES['student_id_doc']['size'];
+            $tmp = $_FILES['student_id_doc']['tmp_name'];
+            $ext = strtolower(pathinfo($orig_name, PATHINFO_EXTENSION));
+            if (in_array($ext, $allowed_exts) && $size <= $max_size) {
+                // Try Cloudinary first
+                $cloudResult = $this->upload_to_cloudinary($tmp, 'ids');
+                if ($cloudResult && isset($cloudResult['secure_url'])) {
+                    $student_id_doc_path = $cloudResult['secure_url'];
+                } else {
+                    // Fallback to local storage
+                    $upload_dir_fs = realpath(__DIR__ . '/../assets/uploads');
+                    if ($upload_dir_fs === false) {
+                        $upload_dir_fs = __DIR__ . '/../assets/uploads';
+                    }
+                    if (!is_dir($upload_dir_fs)) {
+                        @mkdir($upload_dir_fs, 0777, true);
+                    }
+                    $ids_dir_fs = $upload_dir_fs . '/ids';
+                    if (!is_dir($ids_dir_fs)) {
+                        @mkdir($ids_dir_fs, 0777, true);
+                    }
+                    $file_name = 'sid_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+                    $dest_fs = $ids_dir_fs . '/' . $file_name;
+                    if (move_uploaded_file($tmp, $dest_fs)) {
+                        $student_id_doc_path = 'assets/uploads/ids/' . $file_name;
+                    }
+                }
+            }
+        }
+
         // Create profile based on role
         if ($role == 'student') {
             $profile_data = "user_id = $user_id";
             $profile_data .= ", full_name = '$full_name'";
             $profile_data .= ", gender = '$gender'";
             $profile_data .= ", university = '$university'";
+            if (!empty($student_id_doc_path)) {
+                // Ensure column exists; if not, create it (once)
+                $col = $this->db->query("SHOW COLUMNS FROM student_profiles LIKE 'student_id_doc'");
+                if ($col && $col->num_rows == 0) {
+                    $this->db->query("ALTER TABLE student_profiles ADD COLUMN student_id_doc VARCHAR(255) NULL");
+                }
+                $profile_data .= ", student_id_doc = '$student_id_doc_path'";
+            }
             
             if (!empty($date_of_birth)) {
                 $profile_data .= ", date_of_birth = '$date_of_birth'";
@@ -103,6 +162,39 @@ class Auth {
         $this->log_audit($user_id, 'register', 'user', $user_id, ['role' => $role]);
 
         return ['status' => 'success', 'message' => 'Registration successful. Please verify your email to activate your account.'];
+    }
+
+    private function upload_to_cloudinary($fileTmpPath, $folder = 'uploads') {
+        try {
+            if (!file_exists($fileTmpPath)) return null;
+            $timestamp = time();
+            // Parameters for signature (sorted alphabetically): folder, timestamp
+            $params_to_sign = 'folder=' . $folder . '&timestamp=' . $timestamp;
+            $signature = sha1($params_to_sign . $this->cloudinaryApiSecret);
+            $url = 'https://api.cloudinary.com/v1_1/' . $this->cloudinaryCloudName . '/image/upload';
+
+            $postFields = [
+                'file' => new \CURLFile($fileTmpPath),
+                'api_key' => $this->cloudinaryApiKey,
+                'timestamp' => $timestamp,
+                'folder' => $folder,
+                'signature' => $signature
+            ];
+
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_POST, 1);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $postFields);
+            $result = curl_exec($ch);
+            $err = curl_error($ch);
+            curl_close($ch);
+            if ($err) return null;
+            $json = json_decode($result, true);
+            return $json;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     // Login user

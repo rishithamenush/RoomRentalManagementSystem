@@ -584,7 +584,9 @@ function generateUserDetails(user) {
                     <table class="table table-sm">
                         <tr><td><strong>University:</strong></td><td>${user.university || 'Not provided'}</td></tr>
                         <tr><td><strong>Gender:</strong></td><td>${user.gender || 'Not provided'}</td></tr>
-                        <tr><td><strong>Student ID:</strong></td><td>${user.student_id_doc ? 'Verified' : 'Not verified'}</td></tr>
+                        <tr><td><strong>Student ID:</strong></td><td>
+                            ${user.student_id_doc ? `<a href="${user.student_id_doc}" target="_blank" class="btn btn-sm btn-outline-primary">View Document</a>` : 'Not uploaded'}
+                        </td></tr>
                     </table>
                 ` : ''}
                 

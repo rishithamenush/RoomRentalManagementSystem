@@ -286,6 +286,31 @@ ob_end_flush();
         color: #666;
     }
 
+    /* Compact toggle group (e.g., Gender) */
+    .toggle-group {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+    .toggle-option {
+        padding: 12px 16px;
+        border: 2px solid #e9ecef;
+        border-radius: 12px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        background: white;
+        user-select: none;
+    }
+    .toggle-option input[type="radio"] { display: none; }
+    .toggle-option:hover { border-color: #667eea; }
+    .toggle-option.active {
+        border-color: #667eea;
+        background: #f8f9ff;
+        color: #667eea;
+        box-shadow: 0 6px 16px rgba(102,126,234,0.15);
+    }
+
     .form-section {
         display: none;
         animation: fadeInUp 0.5s ease;
@@ -871,14 +896,28 @@ ob_end_flush();
                                 </div>
                                 
                                 <div class="form-group">
-                                    <label for="gender">Gender <span class="required">*</span></label>
-                                    <select class="form-control" name="gender" id="gender">
-                                        <option value="">Select Gender</option>
-                                        <option value="male">Male</option>
-                                        <option value="female">Female</option>
-                                        <option value="other">Other</option>
-                                    </select>
+                                    <label>Gender <span class="required">*</span></label>
+                                    <div class="toggle-group" id="gender-toggle">
+                                        <label class="toggle-option" for="gender_male">
+                                            <input type="radio" name="gender" value="male" id="gender_male">
+                                            Male
+                                        </label>
+                                        <label class="toggle-option" for="gender_female">
+                                            <input type="radio" name="gender" value="female" id="gender_female">
+                                            Female
+                                        </label>
+                                    </div>
                                     <div class="field-error" id="gender-error" style="display: none;">
+                                        <i class="fas fa-exclamation-circle"></i>
+                                        <span></span>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="student_id_doc">Student ID (Image)</label>
+                                    <input type="file" class="form-control" name="student_id_doc" id="student_id_doc" accept="image/*">
+                                    <small class="text-muted">Accepted: JPG, PNG. Max 5MB.</small>
+                                    <div class="field-error" id="student-id-error" style="display: none;">
                                         <i class="fas fa-exclamation-circle"></i>
                                         <span></span>
                                     </div>
@@ -1150,7 +1189,7 @@ ob_end_flush();
                         hideFieldError('full-name');
                     }
 
-                    const gender = $('#gender').val();
+                    const gender = $('input[name="gender"]:checked').val();
                     if (!gender) {
                         showFieldError('gender', 'Please select your gender');
                         isValid = false;
@@ -1309,6 +1348,13 @@ ob_end_flush();
                     $('#student-fields').hide();
                     $('#owner-fields').show();
                 }
+            });
+
+            // Gender toggle selection
+            $('#gender-toggle .toggle-option').on('click', function() {
+                $('#gender-toggle .toggle-option').removeClass('active');
+                $(this).addClass('active');
+                $(this).find('input[type="radio"]').prop('checked', true).trigger('change');
             });
 
             // Real-time validation
