@@ -232,6 +232,53 @@ if(in_array($action, ['login', 'register', 'logout', 'reset_password', 'verify_e
     }
 }
 
+// Cloudinary helper (used for image uploads across the app)
+function cloudinary_config() {
+    $cfg = [
+        'api_key' => '146229295188434',
+        'api_secret' => 'KAX1kKOEXP3AOyr4KWfWdZIlID4',
+        'cloud_name' => 'dguaflt7t'
+    ];
+    $env = getenv('CLOUDINARY_URL');
+    if ($env && preg_match("/cloudinary:\/\/(.*?):(.*?)@(.*)/", $env, $m)) {
+        $cfg['api_key'] = $m[1];
+        $cfg['api_secret'] = $m[2];
+        $cfg['cloud_name'] = $m[3];
+    }
+    return $cfg;
+}
+
+function upload_to_cloudinary_api($fileTmpPath, $folder = 'uploads') {
+    try {
+        if (!file_exists($fileTmpPath)) return null;
+        $cfg = cloudinary_config();
+        $timestamp = time();
+        $params_to_sign = 'folder=' . $folder . '&timestamp=' . $timestamp;
+        $signature = sha1($params_to_sign . $cfg['api_secret']);
+        $url = 'https://api.cloudinary.com/v1_1/' . $cfg['cloud_name'] . '/image/upload';
+        $postFields = [
+            'file' => new \CURLFile($fileTmpPath),
+            'api_key' => $cfg['api_key'],
+            'timestamp' => $timestamp,
+            'folder' => $folder,
+            'signature' => $signature
+        ];
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $postFields);
+        $result = curl_exec($ch);
+        $err = curl_error($ch);
+        curl_close($ch);
+        if ($err) return null;
+        $json = json_decode($result, true);
+        return $json;
+    } catch (\Throwable $e) {
+        return null;
+    }
+}
+
 // New listing management functions
 function create_listing() {
     include '../config/db_connect.php';
@@ -260,7 +307,7 @@ function create_listing() {
     if ($stmt->execute()) {
         $listing_id = $conn->insert_id;
         
-        // Handle image uploads
+        // Handle image uploads (Cloudinary preferred)
         if (!empty($_FILES['images']['name'][0])) {
             $upload_dir = '../assets/uploads/';
             if (!is_dir($upload_dir)) {
@@ -270,16 +317,24 @@ function create_listing() {
             $uploaded_count = 0;
             for ($i = 0; $i < count($_FILES['images']['name']); $i++) {
                 if ($_FILES['images']['error'][$i] === UPLOAD_ERR_OK) {
-                    $file_name = time() . '_' . $_FILES['images']['name'][$i];
-                    $file_path = $upload_dir . $file_name;
-                    
-                    if (move_uploaded_file($_FILES['images']['tmp_name'][$i], $file_path)) {
+                    $tmp = $_FILES['images']['tmp_name'][$i];
+                    $cloud = upload_to_cloudinary_api($tmp, 'listing_images');
+                    $url = '';
+                    if ($cloud && isset($cloud['secure_url'])) {
+                        $url = $cloud['secure_url'];
+                    } else {
+                        // fallback to local
+                        $file_name = time() . '_' . $_FILES['images']['name'][$i];
+                        $file_path = $upload_dir . $file_name;
+                        if (move_uploaded_file($tmp, $file_path)) {
+                            $url = $file_path;
+                        }
+                    }
+                    if ($url) {
                         $media_sql = "INSERT INTO media (listing_id, url, type, position) VALUES (?, ?, 'image', ?)";
                         $media_stmt = $conn->prepare($media_sql);
-                        $media_stmt->bind_param("isi", $listing_id, $file_path, $uploaded_count);
-                        if ($media_stmt->execute()) {
-                            $uploaded_count++;
-                        }
+                        $media_stmt->bind_param("isi", $listing_id, $url, $uploaded_count);
+                        if ($media_stmt->execute()) { $uploaded_count++; }
                     }
                 }
             }
@@ -354,9 +409,11 @@ function update_listing() {
                     $media = $media_result->fetch_assoc();
                     $file_path = $media['url'];
                     
-                    // Delete file
-                    if (file_exists($file_path)) {
-                        unlink($file_path);
+                    // Delete local file only (Cloudinary remote URLs are not removed here)
+                    if (strpos($file_path, 'http') !== 0) {
+                        if (file_exists($file_path)) {
+                            unlink($file_path);
+                        }
                     }
                     
                     // Delete from database
@@ -368,7 +425,7 @@ function update_listing() {
             }
         }
         
-        // Handle new image uploads
+        // Handle new image uploads (Cloudinary preferred)
         if (!empty($_FILES['images']['name'][0])) {
             $upload_dir = '../assets/uploads/';
             if (!is_dir($upload_dir)) {
@@ -386,17 +443,25 @@ function update_listing() {
             $uploaded_count = 0;
             for ($i = 0; $i < count($_FILES['images']['name']); $i++) {
                 if ($_FILES['images']['error'][$i] === UPLOAD_ERR_OK) {
-                    $file_name = time() . '_' . $_FILES['images']['name'][$i];
-                    $file_path = $upload_dir . $file_name;
-                    
-                    if (move_uploaded_file($_FILES['images']['tmp_name'][$i], $file_path)) {
+                    $tmp = $_FILES['images']['tmp_name'][$i];
+                    $cloud = upload_to_cloudinary_api($tmp, 'listing_images');
+                    $url = '';
+                    if ($cloud && isset($cloud['secure_url'])) {
+                        $url = $cloud['secure_url'];
+                    } else {
+                        // fallback to local
+                        $file_name = time() . '_' . $_FILES['images']['name'][$i];
+                        $file_path = $upload_dir . $file_name;
+                        if (move_uploaded_file($tmp, $file_path)) {
+                            $url = $file_path;
+                        }
+                    }
+                    if ($url) {
                         $media_sql = "INSERT INTO media (listing_id, url, type, position) VALUES (?, ?, 'image', ?)";
                         $media_stmt = $conn->prepare($media_sql);
                         $new_position = $max_position + 1 + $uploaded_count;
-                        $media_stmt->bind_param("isi", $listing_id, $file_path, $new_position);
-                        if ($media_stmt->execute()) {
-                            $uploaded_count++;
-                        }
+                        $media_stmt->bind_param("isi", $listing_id, $url, $new_position);
+                        if ($media_stmt->execute()) { $uploaded_count++; }
                     }
                 }
             }
