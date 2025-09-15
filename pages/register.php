@@ -38,17 +38,17 @@ ob_end_flush();
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
         padding: 20px;
         line-height: 1.6;
     }
 
     main#main {
         width: 100%;
-        height: 100%;
+        min-height: calc(100vh - 40px);
         background: transparent;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
     .register-container {
