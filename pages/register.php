@@ -587,6 +587,62 @@ ob_end_flush();
         border-radius: 3px;
     }
 
+    .form-navigation {
+        display: flex;
+        gap: 15px;
+        margin-top: 30px;
+    }
+
+    .form-navigation .btn {
+        flex: 1;
+        padding: 15px 20px;
+        border-radius: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border: none;
+        font-family: inherit;
+    }
+
+    .form-navigation .btn i {
+        font-size: 0.9rem;
+    }
+
+    .form-navigation .btn-secondary {
+        background: white;
+        color: #666;
+        border: 2px solid #e9ecef;
+    }
+
+    .form-navigation .btn-secondary:hover {
+        background: #f8f9fa;
+        border-color: #667eea;
+        color: #667eea;
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+    }
+
+    .form-navigation .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .form-navigation .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+    }
+
+    .form-navigation .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+
     @media (max-width: 768px) {
         .register-container {
             grid-template-columns: 1fr;
@@ -883,14 +939,14 @@ ob_end_flush();
                         </div>
 
                         <!-- Navigation Buttons -->
-                        <div class="form-navigation" style="display: flex; gap: 15px; margin-top: 30px;">
-                            <button type="button" class="btn btn-secondary" id="prev-btn" style="display: none; flex: 1; padding: 15px; border: 2px solid #e9ecef; background: white; border-radius: 12px; font-weight: 600; cursor: pointer; transition: all 0.3s ease;">
+                        <div class="form-navigation">
+                            <button type="button" class="btn btn-secondary" id="prev-btn">
                                 <i class="fas fa-arrow-left"></i> Previous
                             </button>
-                            <button type="button" class="btn btn-primary" id="next-btn" style="flex: 1; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; transition: all 0.3s ease;">
+                            <button type="button" class="btn btn-primary" id="next-btn">
                                 Next <i class="fas fa-arrow-right"></i>
                             </button>
-                            <button type="submit" class="btn-register" id="submit-btn" style="display: none;">
+                            <button type="submit" class="btn-register" id="submit-btn">
                                 <i class="fas fa-spinner spinner"></i>
                                 <span class="btn-text">Create Account</span>
                             </button>
