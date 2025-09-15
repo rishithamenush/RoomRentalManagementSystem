@@ -1,6 +1,15 @@
 <?php include 'config/db_connect.php' ?>
 <?php
 $user = $conn->query("SELECT * FROM users WHERE id = '{$_SESSION['login_id']}'")->fetch_assoc();
+$role = $user['role'];
+$profile = [];
+if($role == 'student'){
+	$pr = $conn->query("SELECT * FROM student_profiles WHERE user_id = '{$_SESSION['login_id']}'");
+	if($pr && $pr->num_rows > 0) $profile = $pr->fetch_assoc();
+}else if($role == 'owner'){
+	$pr = $conn->query("SELECT * FROM owner_profiles WHERE user_id = '{$_SESSION['login_id']}'");
+	if($pr && $pr->num_rows > 0) $profile = $pr->fetch_assoc();
+}
 ?>
 <div class="container-fluid">
 	<div class="col-lg-12">
@@ -14,8 +23,8 @@ $user = $conn->query("SELECT * FROM users WHERE id = '{$_SESSION['login_id']}'")
 					<div class="row">
 						<div class="col-md-6">
 							<div class="form-group">
-								<label for="name" class="control-label">Full Name</label>
-								<input type="text" class="form-control" id="name" name="name" value="<?php echo $user['name'] ?>" required>
+								<label for="full_name" class="control-label">Full Name</label>
+								<input type="text" class="form-control" id="full_name" name="full_name" value="<?php echo htmlspecialchars($profile['full_name'] ?? '') ?>" required>
 							</div>
 						</div>
 						<div class="col-md-6">
@@ -28,14 +37,14 @@ $user = $conn->query("SELECT * FROM users WHERE id = '{$_SESSION['login_id']}'")
 					<div class="row">
 						<div class="col-md-6">
 							<div class="form-group">
-								<label for="contact" class="control-label">Contact</label>
-								<input type="text" class="form-control" id="contact" name="contact" value="<?php echo $user['contact'] ?>">
+								<label for="phone" class="control-label">Contact</label>
+								<input type="text" class="form-control" id="phone" name="phone" value="<?php echo htmlspecialchars($user['phone'] ?? '') ?>">
 							</div>
 						</div>
 						<div class="col-md-6">
 							<div class="form-group">
 								<label for="role" class="control-label">Role</label>
-								<input type="text" class="form-control" id="role" name="role" value="<?php echo ucfirst($user['role']) ?>" readonly>
+								<input type="text" class="form-control" id="role" name="role" value="<?php echo ucfirst($role) ?>" readonly>
 							</div>
 						</div>
 					</div>
@@ -47,20 +56,27 @@ $user = $conn->query("SELECT * FROM users WHERE id = '{$_SESSION['login_id']}'")
 							</div>
 						</div>
 					</div>
+					<?php if($role == 'student'): ?>
 					<div class="row">
 						<div class="col-md-6">
 							<div class="form-group">
-								<label for="password" class="control-label">New Password (Leave blank if not changing)</label>
-								<input type="password" class="form-control" id="password" name="password">
+								<label for="university" class="control-label">University</label>
+								<input type="text" class="form-control" id="university" name="university" value="<?php echo htmlspecialchars($profile['university'] ?? '') ?>">
 							</div>
 						</div>
 						<div class="col-md-6">
 							<div class="form-group">
-								<label for="confirm_password" class="control-label">Confirm New Password</label>
-								<input type="password" class="form-control" id="confirm_password" name="confirm_password">
+								<label for="gender" class="control-label">Gender</label>
+								<select class="form-control" id="gender" name="gender">
+									<option value="" <?php echo (($profile['gender'] ?? '')=='')?'selected':''; ?>>Select Gender</option>
+									<option value="male" <?php echo (($profile['gender'] ?? '')=='male')?'selected':''; ?>>Male</option>
+									<option value="female" <?php echo (($profile['gender'] ?? '')=='female')?'selected':''; ?>>Female</option>
+									<option value="other" <?php echo (($profile['gender'] ?? '')=='other')?'selected':''; ?>>Other</option>
+								</select>
 							</div>
 						</div>
 					</div>
+					<?php endif; ?>
 					<div class="row">
 						<div class="col-md-12">
 							<div class="form-group">
@@ -73,7 +89,7 @@ $user = $conn->query("SELECT * FROM users WHERE id = '{$_SESSION['login_id']}'")
 						<div class="col-md-12">
 							<div class="form-group">
 								<?php if(!empty($user['avatar'])): ?>
-									<img src="assets/uploads/<?php echo $user['avatar'] ?>" alt="Profile Picture" id="cimg" width="150" height="150" style="object-fit: cover; border-radius: 50%;">
+									<img src="<?php echo (strpos($user['avatar'],'http')===0 ? $user['avatar'] : 'assets/uploads/'.$user['avatar']) ?>" alt="Profile Picture" id="cimg" width="150" height="150" style="object-fit: cover; border-radius: 50%;">
 								<?php else: ?>
 									<img src="assets/uploads/default-avatar.png" alt="Profile Picture" id="cimg" width="150" height="150" style="object-fit: cover; border-radius: 50%;">
 								<?php endif; ?>

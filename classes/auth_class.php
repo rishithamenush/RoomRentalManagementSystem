@@ -347,6 +347,23 @@ class Auth {
         if (!empty($phone)) {
             $user_data[] = "phone = '$phone'";
         }
+        // Handle avatar upload (Cloudinary first)
+        if (isset($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
+            $tmp = $_FILES['avatar']['tmp_name'];
+            $cloud = $this->upload_to_cloudinary($tmp, 'avatars');
+            if ($cloud && isset($cloud['secure_url'])) {
+                $user_data[] = "avatar = '".$cloud['secure_url']."'";
+            } else {
+                $upload_dir_fs = realpath(__DIR__ . '/../assets/uploads');
+                if ($upload_dir_fs === false) $upload_dir_fs = __DIR__ . '/../assets/uploads';
+                if (!is_dir($upload_dir_fs)) {@mkdir($upload_dir_fs,0777,true);}            
+                $file_name = 'av_'.time().'_'.bin2hex(random_bytes(4)).'.jpg';
+                $dest = $upload_dir_fs.'/'.$file_name;
+                if (move_uploaded_file($tmp,$dest)) {
+                    $user_data[] = "avatar = '$file_name'"; // local relative path
+                }
+            }
+        }
         if (!empty($password)) {
             $user_data[] = "password_hash = '" . md5($password) . "'";
         }
