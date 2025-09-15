@@ -1,0 +1,131 @@
+<?php include 'config/db_connect.php' ?>
+<?php
+$user = $conn->query("SELECT * FROM users WHERE id = '{$_SESSION['login_id']}'")->fetch_assoc();
+?>
+<div class="container-fluid">
+	<div class="col-lg-12">
+		<div class="card">
+			<div class="card-header">
+				<large><b>My Profile</b></large>
+			</div>
+			<div class="card-body">
+				<form action="" id="manage-profile">
+					<input type="hidden" name="id" value="<?php echo $user['id'] ?>">
+					<div class="row">
+						<div class="col-md-6">
+							<div class="form-group">
+								<label for="name" class="control-label">Full Name</label>
+								<input type="text" class="form-control" id="name" name="name" value="<?php echo $user['name'] ?>" required>
+							</div>
+						</div>
+						<div class="col-md-6">
+							<div class="form-group">
+								<label for="email" class="control-label">Email</label>
+								<input type="email" class="form-control" id="email" name="email" value="<?php echo $user['email'] ?>" required>
+							</div>
+						</div>
+					</div>
+					<div class="row">
+						<div class="col-md-6">
+							<div class="form-group">
+								<label for="contact" class="control-label">Contact</label>
+								<input type="text" class="form-control" id="contact" name="contact" value="<?php echo $user['contact'] ?>">
+							</div>
+						</div>
+						<div class="col-md-6">
+							<div class="form-group">
+								<label for="role" class="control-label">Role</label>
+								<input type="text" class="form-control" id="role" name="role" value="<?php echo ucfirst($user['role']) ?>" readonly>
+							</div>
+						</div>
+					</div>
+					<div class="row">
+						<div class="col-md-12">
+							<div class="form-group">
+								<label for="address" class="control-label">Address</label>
+								<textarea class="form-control" id="address" name="address" rows="3"><?php echo $user['address'] ?></textarea>
+							</div>
+						</div>
+					</div>
+					<div class="row">
+						<div class="col-md-6">
+							<div class="form-group">
+								<label for="password" class="control-label">New Password (Leave blank if not changing)</label>
+								<input type="password" class="form-control" id="password" name="password">
+							</div>
+						</div>
+						<div class="col-md-6">
+							<div class="form-group">
+								<label for="confirm_password" class="control-label">Confirm New Password</label>
+								<input type="password" class="form-control" id="confirm_password" name="confirm_password">
+							</div>
+						</div>
+					</div>
+					<div class="row">
+						<div class="col-md-12">
+							<div class="form-group">
+								<label for="avatar" class="control-label">Profile Picture</label>
+								<input type="file" class="form-control" id="avatar" name="avatar" onchange="displayImg(this,$(this))">
+							</div>
+						</div>
+					</div>
+					<div class="row">
+						<div class="col-md-12">
+							<div class="form-group">
+								<?php if(!empty($user['avatar'])): ?>
+									<img src="assets/uploads/<?php echo $user['avatar'] ?>" alt="Profile Picture" id="cimg" width="150" height="150" style="object-fit: cover; border-radius: 50%;">
+								<?php else: ?>
+									<img src="assets/uploads/default-avatar.png" alt="Profile Picture" id="cimg" width="150" height="150" style="object-fit: cover; border-radius: 50%;">
+								<?php endif; ?>
+							</div>
+						</div>
+					</div>
+					<center>
+						<button class="btn btn-info btn-primary btn-block col-md-2">Update Profile</button>
+					</center>
+				</form>
+			</div>
+		</div>
+	</div>
+</div>
+<script>
+	function displayImg(input,_this) {
+	    if (input.files && input.files[0]) {
+	        var reader = new FileReader();
+	        reader.onload = function (e) {
+	        	$('#cimg').attr('src', e.target.result);
+	        }
+	        reader.readAsDataURL(input.files[0]);
+	    }
+	}
+	
+	$('#manage-profile').submit(function(e){
+		e.preventDefault();
+		start_load();
+		
+		if($('#password').val() != $('#confirm_password').val()){
+			alert_toast("Password does not match.", "error");
+			end_load();
+			return false;
+		}
+		
+		$.ajax({
+			url: 'api/ajax.php?action=update_profile',
+			data: new FormData($(this)[0]),
+		    cache: false,
+		    contentType: false,
+		    processData: false,
+		    method: 'POST',
+		    type: 'POST',
+		    success: function(resp){
+		    	if(resp == 1){
+		    		alert_toast("Profile updated successfully.", "success");
+		    		end_load();
+		    	} else {
+		    		alert_toast("Error updating profile.", "error");
+		    		end_load();
+		    	}
+		    }
+		});
+	});
+</script>
