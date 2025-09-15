@@ -254,7 +254,7 @@
         $order_by = "l.avg_rating DESC, l.created_at DESC";
 
         // Execute query
-        $query = "SELECT l.*, u.email as owner_email, 
+        $query = "SELECT l.*, u.email as owner_email, l.owner_id as owner_id, 
                          (SELECT url FROM media WHERE listing_id = l.id ORDER BY position LIMIT 1) as main_image
                   FROM listings l 
                   INNER JOIN users u ON l.owner_id = u.id 
@@ -278,7 +278,13 @@
             <div class="listing-card">
                 <div class="listing-image">
                     <?php if ($listing['main_image']): ?>
-                        <img src="<?php echo $listing['main_image'] ?>" alt="<?php echo htmlspecialchars($listing['title']) ?>">
+                        <?php 
+                            $img = $listing['main_image'];
+                            if (strpos($img, 'http') === 0) { $src = $img; }
+                            else if (strpos($img, '../') === 0) { $src = substr($img, 3); }
+                            else { $src = (strpos($img, 'assets/') === 0) ? $img : 'assets/uploads/' . ltrim($img, '/'); }
+                        ?>
+                        <img src="<?php echo $src ?>" alt="<?php echo htmlspecialchars($listing['title']) ?>">
                     <?php else: ?>
                         <i class="fa fa-home fa-3x"></i>
                     <?php endif; ?>
@@ -318,9 +324,12 @@
                             <i class="fa fa-user"></i> <?php echo ucfirst($listing['room_type']) ?> • 
                             <i class="fa fa-venus-mars"></i> <?php echo ucfirst($listing['gender_pref']) ?>
                         </small>
-                        <button class="btn btn-view" onclick="viewListing(<?php echo $listing['id'] ?>)">
-                            View Details
-                        </button>
+                        <div>
+                            <button class="btn btn-view" onclick="viewListing(<?php echo $listing['id'] ?>)">View Details</button>
+                            <?php if($_SESSION['login_role'] == 'student'): ?>
+                            <button class="btn btn-primary" onclick="startMessageThread(<?php echo $listing['id'] ?>, <?php echo $listing['owner_id'] ?>)" title="Message Owner"><i class="fa fa-comments"></i></button>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -402,6 +411,25 @@ function viewListing(listingId) {
         error: function() {
             alert('Failed to load listing details');
         }
+    });
+}
+
+function startMessageThread(listingId, ownerId) {
+    $.ajax({
+        url: 'api/ajax.php?action=create_message_thread',
+        method: 'POST',
+        data: {listing_id: listingId, other_user_id: ownerId},
+        success: function(resp){
+            try {
+                var r = JSON.parse(resp);
+                if (r.status === 'success') {
+                    window.location.href = 'index.php?page=messages&open_user=' + ownerId;
+                } else {
+                    alert(r.message || 'Unable to start conversation');
+                }
+            } catch(e) { alert('Unable to start conversation'); }
+        },
+        error: function(){ alert('Unable to start conversation'); }
     });
 }
 

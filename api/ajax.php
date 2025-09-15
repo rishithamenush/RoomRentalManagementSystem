@@ -192,6 +192,14 @@ if(in_array($action, ['login', 'register', 'logout', 'reset_password', 'verify_e
         $result = mark_messages_read();
         echo $result;
     }
+    if($action == "get_thread_messages"){
+        $result = get_thread_messages();
+        echo json_encode($result);
+    }
+    if($action == "send_thread_message"){
+        $result = send_thread_message();
+        echo json_encode($result);
+    }
     
     // Profile management actions
     if($action == "update_profile"){
@@ -1627,6 +1635,142 @@ function delete_review() {
         return ['status' => 'success', 'message' => 'Review deleted successfully'];
     } else {
         return ['status' => 'error', 'message' => 'Failed to delete review'];
+    }
+}
+
+// New messaging functions for thread-based messaging
+function get_thread_messages() {
+    include '../config/db_connect.php';
+    
+    if (!isset($_SESSION['login_id'])) {
+        return [];
+    }
+    
+    $thread_id = $_POST['thread_id'];
+    $current_user_id = $_SESSION['login_id'];
+    
+    // Verify user has access to this thread
+    $access_sql = "SELECT * FROM message_threads WHERE id = ? AND (student_id = ? OR owner_id = ?)";
+    $access_stmt = $conn->prepare($access_sql);
+    $access_stmt->bind_param("iii", $thread_id, $current_user_id, $current_user_id);
+    $access_stmt->execute();
+    $access_result = $access_stmt->get_result();
+    
+    if ($access_result->num_rows == 0) {
+        return [];
+    }
+    
+    // Get messages from the thread
+    $sql = "SELECT m.*, u.email as sender_name 
+            FROM messages m 
+            LEFT JOIN users u ON m.sender_id = u.id 
+            WHERE m.thread_id = ?
+            ORDER BY m.created_at ASC";
+    
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $thread_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    $messages = [];
+    while ($row = $result->fetch_assoc()) {
+        $messages[] = [
+            'id' => $row['id'],
+            'sender_id' => $row['sender_id'],
+            'thread_id' => $row['thread_id'],
+            'body' => $row['body'],
+            'created_at' => date('M d, Y H:i', strtotime($row['created_at'])),
+            'sender_name' => $row['sender_name']
+        ];
+    }
+    
+    return $messages;
+}
+
+function send_thread_message() {
+    include '../config/db_connect.php';
+    
+    if (!isset($_SESSION['login_id'])) {
+        return ['status' => 'error', 'message' => 'Not logged in'];
+    }
+    
+    $thread_id = $_POST['thread_id'] ?? null;
+    $receiver_id = $_POST['receiver_id'];
+    $message_text = $_POST['message_text'];
+    $sender_id = $_SESSION['login_id'];
+    $sender_role = $_SESSION['login_role'];
+    
+    // If no thread_id provided, we need to create or find a thread
+    if (!$thread_id) {
+        // We need listing_id to create a thread - for now, create a simple message
+        // This handles direct messaging without a specific listing context
+        
+        // Determine student and owner IDs based on roles
+        if ($sender_role == 'student') {
+            $student_id = $sender_id;
+            $owner_id = $receiver_id;
+        } else {
+            $student_id = $receiver_id;
+            $owner_id = $sender_id;
+        }
+        
+        // Try to find existing thread between these users (any listing)
+        $find_thread_sql = "SELECT id FROM message_threads WHERE student_id = ? AND owner_id = ? ORDER BY created_at DESC LIMIT 1";
+        $find_thread_stmt = $conn->prepare($find_thread_sql);
+        $find_thread_stmt->bind_param("ii", $student_id, $owner_id);
+        $find_thread_stmt->execute();
+        $find_thread_result = $find_thread_stmt->get_result();
+        
+        if ($find_thread_result->num_rows > 0) {
+            $thread = $find_thread_result->fetch_assoc();
+            $thread_id = $thread['id'];
+        } else {
+            // Create new thread without specific listing
+            $create_thread_sql = "INSERT INTO message_threads (student_id, owner_id, created_at) VALUES (?, ?, NOW())";
+            $create_thread_stmt = $conn->prepare($create_thread_sql);
+            $create_thread_stmt->bind_param("ii", $student_id, $owner_id);
+            
+            if ($create_thread_stmt->execute()) {
+                $thread_id = $conn->insert_id;
+            } else {
+                return ['status' => 'error', 'message' => 'Failed to create conversation thread'];
+            }
+        }
+    }
+    
+    // Verify user has access to this thread
+    $access_sql = "SELECT * FROM message_threads WHERE id = ? AND (student_id = ? OR owner_id = ?)";
+    $access_stmt = $conn->prepare($access_sql);
+    $access_stmt->bind_param("iii", $thread_id, $sender_id, $sender_id);
+    $access_stmt->execute();
+    $access_result = $access_stmt->get_result();
+    
+    if ($access_result->num_rows == 0) {
+        return ['status' => 'error', 'message' => 'Access denied to this conversation'];
+    }
+    
+    // Insert message
+    $insert_sql = "INSERT INTO messages (thread_id, sender_id, body, created_at) VALUES (?, ?, ?, NOW())";
+    $insert_stmt = $conn->prepare($insert_sql);
+    $insert_stmt->bind_param("iis", $thread_id, $sender_id, $message_text);
+    
+    if ($insert_stmt->execute()) {
+        // Update thread's last_message_at
+        $update_thread_sql = "UPDATE message_threads SET last_message_at = NOW() WHERE id = ?";
+        $update_thread_stmt = $conn->prepare($update_thread_sql);
+        $update_thread_stmt->bind_param("i", $thread_id);
+        $update_thread_stmt->execute();
+        
+        // Log audit
+        $audit_sql = "INSERT INTO audit_logs (actor_user_id, action, entity, entity_id, meta) VALUES (?, 'send_thread_message', 'message', ?, ?)";
+        $audit_stmt = $conn->prepare($audit_sql);
+        $meta = json_encode(['thread_id' => $thread_id, 'message_length' => strlen($message_text)]);
+        $audit_stmt->bind_param("iis", $sender_id, $conn->insert_id, $meta);
+        $audit_stmt->execute();
+        
+        return ['status' => 'success', 'message' => 'Message sent successfully', 'thread_id' => $thread_id];
+    } else {
+        return ['status' => 'error', 'message' => 'Failed to send message'];
     }
 }
 
