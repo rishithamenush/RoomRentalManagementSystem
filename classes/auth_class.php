@@ -75,7 +75,7 @@ class Auth {
         $save_user = $this->db->query("INSERT INTO users SET $user_data");
         
         if (!$save_user) {
-            return ['status' => 'error', 'message' => 'Failed to create user account'];
+            return ['status' => 'error', 'message' => 'Failed to create user account: ' . $this->db->error];
         }
 
         $user_id = $this->db->insert_id;
@@ -141,6 +141,21 @@ class Auth {
 
             $save_profile = $this->db->query("INSERT INTO student_profiles SET $profile_data");
         } else if ($role == 'owner') {
+            // Ensure owner_profiles table and columns exist (for robustness across installs)
+            $this->db->query("CREATE TABLE IF NOT EXISTS owner_profiles (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                full_name VARCHAR(255) NOT NULL,
+                business_name VARCHAR(255) NULL,
+                verified TINYINT(1) DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX (user_id)
+            ) ENGINE=InnoDB");
+            // Ensure columns
+            $col = $this->db->query("SHOW COLUMNS FROM owner_profiles LIKE 'business_name'");
+            if ($col && $col->num_rows == 0) { $this->db->query("ALTER TABLE owner_profiles ADD COLUMN business_name VARCHAR(255) NULL"); }
+            $col = $this->db->query("SHOW COLUMNS FROM owner_profiles LIKE 'verified'");
+            if ($col && $col->num_rows == 0) { $this->db->query("ALTER TABLE owner_profiles ADD COLUMN verified TINYINT(1) DEFAULT 0"); }
             $profile_data = "user_id = $user_id";
             $profile_data .= ", full_name = '$full_name'";
             $profile_data .= ", verified = 0";
@@ -155,7 +170,7 @@ class Auth {
         if (!$save_profile) {
             // Rollback user creation if profile creation fails
             $this->db->query("DELETE FROM users WHERE id = $user_id");
-            return ['status' => 'error', 'message' => 'Failed to create profile'];
+            return ['status' => 'error', 'message' => 'Failed to create profile: ' . $this->db->error];
         }
 
         // Log registration
