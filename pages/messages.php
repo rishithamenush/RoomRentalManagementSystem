@@ -9,90 +9,163 @@
 				<div class="row">
 					<div class="col-md-4">
 						<div class="card">
-							<div class="card-header">
-								<h5>Conversations</h5>
+							<div class="card-header d-flex justify-content-between align-items-center">
+								<h5 class="mb-0">Messages</h5>
+								<div class="btn-group btn-group-sm" role="group">
+									<button type="button" class="btn btn-outline-primary active" id="btn-conversations">Chats</button>
+									<button type="button" class="btn btn-outline-primary" id="btn-all-users">All Users</button>
+								</div>
 							</div>
 							<div class="card-body" style="height: 400px; overflow-y: auto;">
-								<div class="list-group" id="conversations">
+								<!-- Active Conversations Tab -->
+								<div id="conversations-tab" class="list-group">
 									<?php
 									$myId = (int)$_SESSION['login_id'];
 									$openUserId = isset($_GET['open_user']) ? (int)$_GET['open_user'] : 0;
 									
-									// Get conversations from message_threads table
+									// Get conversations that have actual messages
 									$conversations = $conn->query("SELECT mt.*,
 									        COALESCE(sp.full_name, op.full_name, u.email) AS other_user_name,
 									        u.role AS other_user_role,
 									        u.id as other_user_id,
 									        l.title as listing_title,
-									        mt.last_message_at
+									        mt.last_message_at,
+									        (SELECT COUNT(*) FROM messages WHERE thread_id = mt.id) as message_count,
+									        (SELECT body FROM messages WHERE thread_id = mt.id ORDER BY created_at DESC LIMIT 1) as last_message
 									    FROM message_threads mt
 									    INNER JOIN users u ON (CASE WHEN mt.student_id = $myId THEN mt.owner_id ELSE mt.student_id END) = u.id
 									    LEFT JOIN student_profiles sp ON u.id = sp.user_id AND u.role = 'student'
 									    LEFT JOIN owner_profiles op ON u.id = op.user_id AND u.role = 'owner'
 									    LEFT JOIN listings l ON mt.listing_id = l.id
-									    WHERE mt.student_id = $myId OR mt.owner_id = $myId
+									    WHERE (mt.student_id = $myId OR mt.owner_id = $myId)
+									    AND EXISTS (SELECT 1 FROM messages WHERE thread_id = mt.id)
 									    ORDER BY mt.last_message_at DESC, mt.created_at DESC");
 									    
-									while($row = $conversations->fetch_assoc()):
+									if ($conversations->num_rows > 0):
+									    while($row = $conversations->fetch_assoc()):
 									?>
 									<a href="#" class="list-group-item list-group-item-action conversation-item d-flex align-items-center" 
 									   data-thread-id="<?php echo $row['id'] ?>" data-user-id="<?php echo $row['other_user_id'] ?>">
-										<div class="avatar rounded-circle bg-secondary text-white d-inline-flex align-items-center justify-content-center mr-2" style="width:34px;height:34px;">
+										<div class="avatar rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center mr-2" style="width:40px;height:40px;">
 											<span><?php echo strtoupper(substr($row['other_user_name'],0,1)) ?></span>
 										</div>
 										<div class="flex-grow-1">
 											<div class="d-flex w-100 justify-content-between">
 												<strong><?php echo $row['other_user_name'] ?></strong>
-												<small class="text-muted"><?php echo $row['last_message_at'] ? date('M d', strtotime($row['last_message_at'])) : '' ?></small>
+												<small class="text-muted"><?php echo $row['last_message_at'] ? date('M d', strtotime($row['last_message_at'])) : date('M d', strtotime($row['created_at'])) ?></small>
 											</div>
 											<small class="text-muted"><?php echo ucfirst($row['other_user_role']) ?></small>
 											<?php if ($row['listing_title']): ?>
 											<small class="text-muted d-block">Re: <?php echo $row['listing_title'] ?></small>
 											<?php endif; ?>
+											<?php if ($row['last_message']): ?>
+											<small class="text-muted d-block"><?php echo substr($row['last_message'], 0, 50) . (strlen($row['last_message']) > 50 ? '...' : '') ?></small>
+											<?php endif; ?>
 										</div>
 									</a>
-									<?php endwhile; ?>
+									<?php 
+									    endwhile;
+									else:
+									?>
+									<div class="p-3 text-muted text-center">
+									    <i class="fa fa-comments fa-3x mb-3 text-secondary"></i><br>
+									    No active conversations yet.<br>
+									    <small>Click "All Users" to start chatting with someone!</small>
+									</div>
+									<?php endif; ?>
+								</div>
+								
+								<!-- All Users Tab -->
+								<div id="all-users-tab" class="list-group" style="display: none;">
 									<?php
-									// Fallback: if no conversations found but open_user is provided, show that user as a starter item
-									if (isset($conversations) && $conversations->num_rows == 0 && $openUserId > 0) {
-									    $uRes = $conn->query("SELECT u.id,
+									// Get all users except current user, grouped by role
+									$myRole = $_SESSION['login_role'];
+									
+									// Show different user types based on current user's role
+									if ($myRole == 'student') {
+									    // Students can message owners and other students
+									    $all_users = $conn->query("SELECT u.id, u.role,
 									        COALESCE(sp.full_name, op.full_name, u.email) AS name,
-									        u.role
-									     FROM users u
-									     LEFT JOIN student_profiles sp ON u.id = sp.user_id
-									     LEFT JOIN owner_profiles op ON u.id = op.user_id
-									     WHERE u.id = $openUserId");
-									    if ($uRes && $uRes->num_rows > 0) {
-									        $u = $uRes->fetch_assoc();
-									        ?>
-									        <a href="#" class="list-group-item list-group-item-action conversation-item d-flex align-items-center" data-user-id="<?php echo $u['id'] ?>">
-									            <div class="avatar rounded-circle bg-secondary text-white d-inline-flex align-items-center justify-content-center mr-2" style="width:34px;height:34px;">
-									                <span><?php echo strtoupper(substr($u['name'],0,1)) ?></span>
-									            </div>
-									            <div class="flex-grow-1">
-									                <div class="d-flex w-100 justify-content-between">
-									                    <strong><?php echo $u['name'] ?></strong>
-									                    <small class="text-muted"></small>
-									                </div>
-									                <small class="text-muted"><?php echo ucfirst($u['role']) ?></small>
-									            </div>
-									        </a>
-									        <?php
-									    } else {
-									        echo '<div class="p-3 text-muted">No conversations yet. Click the Message button on a listing to start chatting.</div>';
-									    }
+									        u.email
+									    FROM users u
+									    LEFT JOIN student_profiles sp ON u.id = sp.user_id
+									    LEFT JOIN owner_profiles op ON u.id = op.user_id
+									    WHERE u.id != $myId AND u.role IN ('owner', 'student') AND u.status = 'active'
+									    ORDER BY u.role, name");
+									} elseif ($myRole == 'owner') {
+									    // Owners can message students and other owners
+									    $all_users = $conn->query("SELECT u.id, u.role,
+									        COALESCE(sp.full_name, op.full_name, u.email) AS name,
+									        u.email
+									    FROM users u
+									    LEFT JOIN student_profiles sp ON u.id = sp.user_id
+									    LEFT JOIN owner_profiles op ON u.id = op.user_id
+									    WHERE u.id != $myId AND u.role IN ('student', 'owner') AND u.status = 'active'
+									    ORDER BY u.role, name");
+									} else {
+									    // Admins can message everyone
+									    $all_users = $conn->query("SELECT u.id, u.role,
+									        COALESCE(sp.full_name, op.full_name, ap.full_name, u.email) AS name,
+									        u.email
+									    FROM users u
+									    LEFT JOIN student_profiles sp ON u.id = sp.user_id
+									    LEFT JOIN owner_profiles op ON u.id = op.user_id
+									    LEFT JOIN admin_profiles ap ON u.id = ap.user_id
+									    WHERE u.id != $myId AND u.status = 'active'
+									    ORDER BY u.role, name");
 									}
 									
-									// If no conversations at all, show helpful message
-									if (isset($conversations) && $conversations->num_rows == 0 && $openUserId == 0) {
-									    echo '<div class="p-3 text-muted text-center">
-									        <i class="fa fa-comments fa-3x mb-3 text-secondary"></i><br>
-									        No conversations yet.<br>
-									        <small>Visit a property listing and click "Message Owner" to start chatting!</small>
-									    </div>';
-									}
+									$currentRole = '';
+									while($user = $all_users->fetch_assoc()):
+									    if ($currentRole != $user['role']):
+									        if ($currentRole != '') echo '</div>';
+									        $currentRole = $user['role'];
+									        echo '<div class="list-group-item-heading bg-light p-2"><strong>' . ucfirst($currentRole) . 's</strong></div>';
+									        echo '<div class="role-group">';
+									    endif;
+									?>
+									<a href="#" class="list-group-item list-group-item-action conversation-item d-flex align-items-center" 
+									   data-user-id="<?php echo $user['id'] ?>" data-is-new="true">
+										<div class="avatar rounded-circle bg-secondary text-white d-inline-flex align-items-center justify-content-center mr-2" style="width:36px;height:36px;">
+											<span><?php echo strtoupper(substr($user['name'],0,1)) ?></span>
+										</div>
+										<div class="flex-grow-1">
+											<div class="d-flex w-100 justify-content-between">
+												<strong><?php echo $user['name'] ?></strong>
+												<small class="text-success"><i class="fa fa-plus"></i></small>
+											</div>
+											<small class="text-muted"><?php echo $user['email'] ?></small>
+											<small class="text-muted"><?php echo ucfirst($user['role']) ?></small>
+										</div>
+									</a>
+									<?php 
+									endwhile;
+									if ($currentRole != '') echo '</div>';
 									?>
 								</div>
+								
+								<?php
+								// Handle open_user parameter for new conversations
+								if ($openUserId > 0) {
+								    $uRes = $conn->query("SELECT u.id,
+								        COALESCE(sp.full_name, op.full_name, u.email) AS name,
+								        u.role
+								     FROM users u
+								     LEFT JOIN student_profiles sp ON u.id = sp.user_id
+								     LEFT JOIN owner_profiles op ON u.id = op.user_id
+								     WHERE u.id = $openUserId");
+								    if ($uRes && $uRes->num_rows > 0) {
+								        echo '<script>
+								        $(document).ready(function() {
+								            $("#btn-all-users").click();
+								            setTimeout(function() {
+								                $(".conversation-item[data-user-id=\'' . $openUserId . '\']").click();
+								            }, 300);
+								        });
+								        </script>';
+								    }
+								}
+								?>
 							</div>
 						</div>
 					</div>
@@ -143,13 +216,30 @@
 	var currentThreadId = null;
 	var currentUserId = null;
 	
-	$('.conversation-item').click(function(e){
+	// Tab switching functionality
+	$('#btn-conversations').click(function() {
+		$('#conversations-tab').show();
+		$('#all-users-tab').hide();
+		$(this).addClass('active');
+		$('#btn-all-users').removeClass('active');
+	});
+	
+	$('#btn-all-users').click(function() {
+		$('#conversations-tab').hide();
+		$('#all-users-tab').show();
+		$(this).addClass('active');
+		$('#btn-conversations').removeClass('active');
+	});
+	
+	// Conversation item click handler (using event delegation for dynamic content)
+	$(document).on('click', '.conversation-item', function(e){
 		e.preventDefault();
 		var threadId = $(this).data('thread-id');
 		var userId = $(this).data('user-id');
 		var userName = $(this).find('strong').length ? $(this).find('strong').text() : $(this).find('h6').text();
+		var isNew = $(this).data('is-new');
 		
-		currentThreadId = threadId;
+		currentThreadId = threadId || null;
 		currentUserId = userId;
 		
 		$('.conversation-item').removeClass('active');
@@ -158,13 +248,17 @@
 		$('#chat-title').text('Chat with ' + userName);
     	$('#chat-initial').text(userName ? userName.charAt(0).toUpperCase() : '?');
 		$('#receiver_id').val(userId);
-		$('#thread_id').val(threadId);
+		$('#thread_id').val(threadId || '');
 		$('#message-form').show();
 		
 		if (threadId) {
+			// Existing conversation with messages
 			loadThreadMessages(threadId);
+		} else if (isNew) {
+			// New conversation
+			$('#messages-container').html('<div class="text-center text-muted mt-5"><i class="fa fa-paper-plane fa-2x mb-3 text-primary"></i><br><p>Start a new conversation with ' + userName + '</p><small class="text-muted">Send your first message below!</small></div>');
 		} else {
-			// For new conversations without thread yet
+			// Fallback
 			$('#messages-container').html('<div class="text-center text-muted mt-5"><p>Start a new conversation by sending a message</p></div>');
 		}
 	});
@@ -249,6 +343,14 @@
 							loadThreadMessages(currentThreadId);
 							// Update the conversation item with thread ID
 							$('.conversation-item.active').attr('data-thread-id', currentThreadId);
+							// Switch to conversations tab to show the new conversation
+							if ($('#all-users-tab').is(':visible')) {
+								$('#btn-conversations').click();
+								// Refresh the page to show the new conversation in the list
+								setTimeout(function() {
+									location.reload();
+								}, 1000);
+							}
 						}
 					} else {
 						alert('Error sending message: ' + result.message);
