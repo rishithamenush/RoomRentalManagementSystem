@@ -11,8 +11,8 @@
 
 <?php
   if(!isset($_SESSION['login_id']))
-    header('location:login.php');
- include('./header.php'); 
+    header('location:pages/login.php');
+ include('includes/header.php'); 
  // include('./auth.php'); 
  ?>
 
@@ -60,8 +60,8 @@
 </style>
 
 <body>
-	<?php include 'topbar.php' ?>
-	<?php include 'navbar.php' ?>
+	<?php include 'includes/topbar.php' ?>
+	<?php include 'includes/navbar.php' ?>
   <div class="toast" id="alert_toast" role="alert" aria-live="assertive" aria-atomic="true">
     <div class="toast-body text-white">
     </div>
@@ -69,7 +69,7 @@
   
   <main id="view-panel" >
       <?php $page = isset($_GET['page']) ? $_GET['page'] :'dashboard'; ?>
-  	<?php include $page.'.php' ?>
+  	<?php include 'pages/'.$page.'.php' ?>
   	
 
   </main>
