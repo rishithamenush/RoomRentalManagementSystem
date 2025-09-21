@@ -1880,5 +1880,141 @@ function send_thread_message() {
     }
 }
 
+// Transfer bookings function
+if ($action == "transfer_bookings") {
+    $result = transfer_bookings();
+    echo $result;
+}
+
+// Process booking payment
+if ($action == "process_booking_payment") {
+    $result = process_booking_payment();
+    echo $result;
+}
+
+function transfer_bookings() {
+    include '../config/db_connect.php';
+    
+    if (!isset($_SESSION['login_id'])) {
+        return 0;
+    }
+    
+    $new_student_id = $_POST['new_student_id'];
+    
+    // Transfer orphaned bookings to current user
+    $update_sql = "UPDATE bookings SET student_id = ? WHERE student_id = 20";
+    $update_stmt = $conn->prepare($update_sql);
+    $update_stmt->bind_param("i", $new_student_id);
+    
+    if ($update_stmt->execute()) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+function process_booking_payment() {
+    include '../config/db_connect.php';
+    session_start();
+    
+    // Check if user is logged in and is a student
+    if (!isset($_SESSION['login_id']) || $_SESSION['login_role'] != 'student') {
+        return json_encode(['status' => 'error', 'message' => 'Access denied']);
+    }
+    
+    $booking_id = $_POST['booking_id'] ?? 0;
+    $payment_method = $_POST['payment_method'] ?? '';
+    $amount = $_POST['amount'] ?? 0;
+    $student_id = $_SESSION['login_id'];
+    
+    // Validate inputs
+    if (!$booking_id || !$payment_method || !$amount) {
+        return json_encode(['status' => 'error', 'message' => 'Missing required fields']);
+    }
+    
+    // Verify booking belongs to student and is approved
+    $booking_sql = "SELECT * FROM bookings WHERE id = ? AND student_id = ? AND status = 'approved'";
+    $booking_stmt = $conn->prepare($booking_sql);
+    $booking_stmt->bind_param("ii", $booking_id, $student_id);
+    $booking_stmt->execute();
+    $booking_result = $booking_stmt->get_result();
+    
+    if ($booking_result->num_rows == 0) {
+        return json_encode(['status' => 'error', 'message' => 'Booking not found or not eligible for payment']);
+    }
+    
+    $booking = $booking_result->fetch_assoc();
+    
+    // Verify amount matches
+    if (abs($amount - $booking['total_amount']) > 0.01) {
+        return json_encode(['status' => 'error', 'message' => 'Payment amount mismatch']);
+    }
+    
+    // Start transaction
+    $conn->begin_transaction();
+    
+    try {
+        // Update booking status to confirmed and add payment info
+        $update_booking_sql = "UPDATE bookings SET 
+                              status = 'confirmed', 
+                              payment_status = 'completed',
+                              payment_method = ?,
+                              payment_date = NOW(),
+                              updated_at = NOW()
+                              WHERE id = ?";
+        $update_stmt = $conn->prepare($update_booking_sql);
+        $update_stmt->bind_param("si", $payment_method, $booking_id);
+        
+        if (!$update_stmt->execute()) {
+            throw new Exception('Failed to update booking');
+        }
+        
+        // Create payment record (if payments table exists)
+        $payment_table_check = $conn->query("SHOW TABLES LIKE 'payments'");
+        if ($payment_table_check && $payment_table_check->num_rows > 0) {
+            $payment_sql = "INSERT INTO payments (booking_id, student_id, amount, payment_method, payment_status, payment_date, created_at) 
+                           VALUES (?, ?, ?, ?, 'completed', NOW(), NOW())";
+            $payment_stmt = $conn->prepare($payment_sql);
+            $payment_stmt->bind_param("iids", $booking_id, $student_id, $amount, $payment_method);
+            
+            if (!$payment_stmt->execute()) {
+                throw new Exception('Failed to create payment record');
+            }
+        }
+        
+        // Log the payment in audit logs (if table exists)
+        $audit_table_check = $conn->query("SHOW TABLES LIKE 'audit_logs'");
+        if ($audit_table_check && $audit_table_check->num_rows > 0) {
+            $audit_sql = "INSERT INTO audit_logs (actor_user_id, action, entity, entity_id, meta) VALUES (?, 'booking_payment', 'booking', ?, ?)";
+            $audit_stmt = $conn->prepare($audit_sql);
+            $meta = json_encode([
+                'payment_method' => $payment_method,
+                'amount' => $amount,
+                'booking_id' => $booking_id
+            ]);
+            $audit_stmt->bind_param("iis", $student_id, $booking_id, $meta);
+            $audit_stmt->execute();
+        }
+        
+        // Commit transaction
+        $conn->commit();
+        
+        return json_encode([
+            'status' => 'success', 
+            'message' => 'Payment processed successfully',
+            'booking_id' => $booking_id
+        ]);
+        
+    } catch (Exception $e) {
+        // Rollback transaction
+        $conn->rollback();
+        
+        return json_encode([
+            'status' => 'error', 
+            'message' => 'Payment processing failed: ' . $e->getMessage()
+        ]);
+    }
+}
+
 ob_end_flush();
 ?>
