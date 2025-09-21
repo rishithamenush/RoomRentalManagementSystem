@@ -178,6 +178,14 @@ if(in_array($action, ['login', 'register', 'logout', 'reset_password', 'verify_e
         $result = update_complaint_status();
         echo $result;
     }
+    if($action == "file_complaint"){
+        $result = file_complaint();
+        echo json_encode($result);
+    }
+    if($action == "get_student_complaint_details"){
+        $result = get_student_complaint_details();
+        echo json_encode($result);
+    }
     
     // Messaging actions
     if($action == "get_conversation_details"){
@@ -936,7 +944,7 @@ function update_complaint_status() {
     $admin_id = $_SESSION['login_id'];
     
     // Update complaint status
-    $update_sql = "UPDATE complaints SET status = ?, admin_notes = ?, resolver_admin_id = ?";
+    $update_sql = "UPDATE complaints SET status = ?, resolution_notes = ?, resolver_admin_id = ?";
     
     if ($new_status == 'resolved') {
         $update_sql .= ", resolved_at = NOW()";
@@ -1635,6 +1643,104 @@ function delete_review() {
         return ['status' => 'success', 'message' => 'Review deleted successfully'];
     } else {
         return ['status' => 'error', 'message' => 'Failed to delete review'];
+    }
+}
+
+// Student complaint functions
+function file_complaint() {
+    include '../config/db_connect.php';
+    
+    if (!isset($_SESSION['login_id']) || $_SESSION['login_role'] != 'student') {
+        return ['status' => 'error', 'message' => 'Unauthorized'];
+    }
+    
+    $student_id = $_SESSION['login_id'];
+    $complaint_type = $_POST['complaint_type'];
+    $listing_id = $_POST['listing_id'] ?? null;
+    $owner_id = $_POST['owner_id'] ?? null;
+    $title = $_POST['title'];
+    $description = $_POST['description'];
+    $priority = $_POST['priority'];
+    
+    // Validate input
+    if (empty($title) || empty($description)) {
+        return ['status' => 'error', 'message' => 'Title and description are required'];
+    }
+    
+    if ($complaint_type == 'property' && !$listing_id) {
+        return ['status' => 'error', 'message' => 'Property selection is required'];
+    }
+    
+    if ($complaint_type == 'owner' && !$owner_id) {
+        return ['status' => 'error', 'message' => 'Owner selection is required'];
+    }
+    
+    // Get owner ID if complaint is about property
+    if ($complaint_type == 'property') {
+        $listing_result = $conn->query("SELECT owner_id FROM listings WHERE id = $listing_id");
+        if ($listing_result->num_rows > 0) {
+            $listing = $listing_result->fetch_assoc();
+            $owner_id = $listing['owner_id'];
+        } else {
+            return ['status' => 'error', 'message' => 'Property not found'];
+        }
+    } else {
+        $listing_id = null; // Clear listing_id for owner complaints
+    }
+    
+    // Insert complaint
+    $insert_sql = "INSERT INTO complaints (by_student_id, against_owner_id, listing_id, title, description, priority, status, created_at, updated_at) 
+                   VALUES (?, ?, ?, ?, ?, ?, 'under_review', NOW(), NOW())";
+    $insert_stmt = $conn->prepare($insert_sql);
+    $insert_stmt->bind_param("iiisss", $student_id, $owner_id, $listing_id, $title, $description, $priority);
+    
+    if ($insert_stmt->execute()) {
+        $complaint_id = $conn->insert_id;
+        
+        // Log audit
+        $audit_sql = "INSERT INTO audit_logs (actor_user_id, action, entity, entity_id, meta) VALUES (?, 'file_complaint', 'complaint', ?, ?)";
+        $audit_stmt = $conn->prepare($audit_sql);
+        $meta = json_encode(['complaint_type' => $complaint_type, 'priority' => $priority, 'title' => $title]);
+        $audit_stmt->bind_param("iis", $student_id, $complaint_id, $meta);
+        $audit_stmt->execute();
+        
+        return ['status' => 'success', 'message' => 'Complaint filed successfully', 'complaint_id' => $complaint_id];
+    } else {
+        return ['status' => 'error', 'message' => 'Failed to file complaint: ' . $conn->error];
+    }
+}
+
+function get_student_complaint_details() {
+    include '../config/db_connect.php';
+    
+    if (!isset($_SESSION['login_id']) || $_SESSION['login_role'] != 'student') {
+        return ['status' => 'error', 'message' => 'Unauthorized'];
+    }
+    
+    $complaint_id = $_POST['id'];
+    $student_id = $_SESSION['login_id'];
+    
+    $sql = "SELECT c.*, 
+                   op.full_name as owner_name,
+                   l.title as listing_title, l.address as listing_address,
+                   ap.full_name as resolver_name
+            FROM complaints c 
+            LEFT JOIN users u2 ON c.against_owner_id = u2.id
+            LEFT JOIN owner_profiles op ON u2.id = op.user_id
+            LEFT JOIN listings l ON c.listing_id = l.id
+            LEFT JOIN users u3 ON c.resolver_admin_id = u3.id
+            LEFT JOIN admin_profiles ap ON u3.id = ap.user_id
+            WHERE c.id = ? AND c.by_student_id = ?";
+    
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("ii", $complaint_id, $student_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows > 0) {
+        return $result->fetch_assoc();
+    } else {
+        return ['status' => 'error', 'message' => 'Complaint not found'];
     }
 }
 

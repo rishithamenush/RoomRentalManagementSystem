@@ -19,7 +19,7 @@
     .complaint-card.resolved {
         border-left-color: #28a745;
     }
-    .complaint-card.dismissed {
+    .complaint-card.rejected {
         border-left-color: #6c757d;
     }
     
@@ -55,7 +55,7 @@
     }
     .status-under-review { background: #fff3cd; color: #856404; }
     .status-resolved { background: #d4edda; color: #155724; }
-    .status-dismissed { background: #e2e3e5; color: #383d41; }
+    .status-rejected { background: #e2e3e5; color: #383d41; }
     
     .complaint-content {
         padding: 20px;
@@ -265,13 +265,13 @@
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="stat-card">
-                <div class="stat-number stat-dismissed" id="dismissed-complaints">
+                <div class="stat-number stat-dismissed" id="rejected-complaints">
                     <?php 
-                    $dismissed = $conn->query("SELECT COUNT(*) as count FROM complaints WHERE status = 'dismissed'")->fetch_assoc()['count'];
-                    echo $dismissed;
+                    $rejected = $conn->query("SELECT COUNT(*) as count FROM complaints WHERE status = 'rejected'")->fetch_assoc()['count'];
+                    echo $rejected;
                     ?>
                 </div>
-                <div class="stat-label">Dismissed</div>
+                <div class="stat-label">Rejected</div>
             </div>
         </div>
     </div>
@@ -281,7 +281,7 @@
         <button class="filter-tab active" data-status="all">All Complaints</button>
         <button class="filter-tab" data-status="under_review">Under Review</button>
         <button class="filter-tab" data-status="resolved">Resolved</button>
-        <button class="filter-tab" data-status="dismissed">Dismissed</button>
+        <button class="filter-tab" data-status="rejected">Rejected</button>
         <button class="filter-tab" data-priority="high">High Priority</button>
     </div>
 
@@ -360,10 +360,10 @@
                         <?php endif; ?>
                     </div>
                     
-                    <?php if ($complaint['admin_notes']): ?>
+                    <?php if ($complaint['resolution_notes']): ?>
                     <div class="admin-notes">
-                        <h6><i class="fa fa-sticky-note"></i> Admin Notes</h6>
-                        <p><?php echo nl2br(htmlspecialchars($complaint['admin_notes'])) ?></p>
+                        <h6><i class="fa fa-sticky-note"></i> Resolution Notes</h6>
+                        <p><?php echo nl2br(htmlspecialchars($complaint['resolution_notes'])) ?></p>
                     </div>
                     <?php endif; ?>
                     
@@ -376,8 +376,8 @@
                             <button class="btn-action btn-resolve" onclick="resolveComplaint(<?php echo $complaint['id'] ?>)">
                                 <i class="fa fa-check"></i> Resolve
                             </button>
-                            <button class="btn-action btn-dismiss" onclick="dismissComplaint(<?php echo $complaint['id'] ?>)">
-                                <i class="fa fa-times"></i> Dismiss
+                            <button class="btn-action btn-dismiss" onclick="rejectComplaint(<?php echo $complaint['id'] ?>)">
+                                <i class="fa fa-times"></i> Reject
                             </button>
                         <?php elseif($complaint['status'] == 'resolved'): ?>
                             <button class="btn-action btn-reopen" onclick="reopenComplaint(<?php echo $complaint['id'] ?>)">
@@ -419,7 +419,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
                 <button type="button" class="btn btn-success" id="resolveBtn" style="display: none;">Resolve</button>
-                <button type="button" class="btn btn-warning" id="dismissBtn" style="display: none;">Dismiss</button>
+                <button type="button" class="btn btn-warning" id="rejectBtn" style="display: none;">Reject</button>
                 <button type="button" class="btn btn-info" id="reopenBtn" style="display: none;">Reopen</button>
             </div>
         </div>
@@ -453,28 +453,28 @@
     </div>
 </div>
 
-<!-- Dismissal Modal -->
-<div class="modal fade" id="dismissalModal" tabindex="-1" role="dialog">
+<!-- Rejection Modal -->
+<div class="modal fade" id="rejectionModal" tabindex="-1" role="dialog">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Dismiss Complaint</h5>
+                <h5 class="modal-title">Reject Complaint</h5>
                 <button type="button" class="close" data-dismiss="modal">
                     <span>&times;</span>
                 </button>
             </div>
             <div class="modal-body">
-                <form id="dismissal-form">
-                    <input type="hidden" id="dismiss-complaint-id">
+                <form id="rejection-form">
+                    <input type="hidden" id="reject-complaint-id">
                     <div class="form-group">
-                        <label for="dismissal-notes">Dismissal Reason</label>
-                        <textarea class="form-control" id="dismissal-notes" rows="4" placeholder="Please provide a reason for dismissing this complaint..." required></textarea>
+                        <label for="rejection-notes">Rejection Reason</label>
+                        <textarea class="form-control" id="rejection-notes" rows="4" placeholder="Please provide a reason for rejecting this complaint..." required></textarea>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-warning" onclick="confirmDismissal()">Dismiss Complaint</button>
+                <button type="button" class="btn btn-warning" onclick="confirmRejection()">Reject Complaint</button>
             </div>
         </div>
     </div>
@@ -516,15 +516,15 @@ function viewComplaint(complaintId) {
                 // Show action buttons based on status
                 if (complaint.status === 'under_review') {
                     $('#resolveBtn').show().attr('onclick', `resolveComplaint(${complaintId})`);
-                    $('#dismissBtn').show().attr('onclick', `dismissComplaint(${complaintId})`);
+                    $('#rejectBtn').show().attr('onclick', `rejectComplaint(${complaintId})`);
                     $('#reopenBtn').hide();
                 } else if (complaint.status === 'resolved') {
                     $('#resolveBtn').hide();
-                    $('#dismissBtn').hide();
+                    $('#rejectBtn').hide();
                     $('#reopenBtn').show().attr('onclick', `reopenComplaint(${complaintId})`);
                 } else {
                     $('#resolveBtn').hide();
-                    $('#dismissBtn').hide();
+                    $('#rejectBtn').hide();
                     $('#reopenBtn').hide();
                 }
                 
@@ -566,10 +566,10 @@ function generateComplaintDetails(complaint) {
             <div class="col-12">
                 <h6>Description</h6>
                 <p>${complaint.description}</p>
-                ${complaint.admin_notes ? `
-                    <h6>Admin Notes</h6>
+                ${complaint.resolution_notes ? `
+                    <h6>Resolution Notes</h6>
                     <div class="admin-notes">
-                        <p>${complaint.admin_notes}</p>
+                        <p>${complaint.resolution_notes}</p>
                     </div>
                 ` : ''}
             </div>
@@ -620,36 +620,36 @@ function confirmResolution() {
     });
 }
 
-function dismissComplaint(complaintId) {
-    $('#dismiss-complaint-id').val(complaintId);
-    $('#dismissal-notes').val('');
-    $('#dismissalModal').modal('show');
+function rejectComplaint(complaintId) {
+    $('#reject-complaint-id').val(complaintId);
+    $('#rejection-notes').val('');
+    $('#rejectionModal').modal('show');
 }
 
-function confirmDismissal() {
-    const complaintId = $('#dismiss-complaint-id').val();
-    const notes = $('#dismissal-notes').val();
+function confirmRejection() {
+    const complaintId = $('#reject-complaint-id').val();
+    const notes = $('#rejection-notes').val();
     
     if (!notes.trim()) {
-        alert('Please provide dismissal reason');
+        alert('Please provide rejection reason');
         return;
     }
     
     $.ajax({
         url: 'api/ajax.php?action=update_complaint_status',
         method: 'POST',
-        data: {id: complaintId, status: 'dismissed', notes: notes},
+        data: {id: complaintId, status: 'rejected', notes: notes},
         success: function(response) {
             if (response == 1) {
-                alert('Complaint dismissed successfully');
-                $('#dismissalModal').modal('hide');
+                alert('Complaint rejected successfully');
+                $('#rejectionModal').modal('hide');
                 location.reload();
             } else {
-                alert('Failed to dismiss complaint');
+                alert('Failed to reject complaint');
             }
         },
         error: function() {
-            alert('Failed to dismiss complaint');
+            alert('Failed to reject complaint');
         }
     });
 }
