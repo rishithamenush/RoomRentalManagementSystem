@@ -423,7 +423,7 @@ function displayReviews(reviews) {
     reviews.forEach(review => {
         const stars = generateStars(review.rating);
         const date = new Date(review.created_at).toLocaleDateString();
-        const canEdit = review.reviewer_id == <?php echo $user_id ?>;
+        const canEdit = review.by_user_id == <?php echo $user_id ?>;
         
         html += `
             <div class="review-card">
@@ -434,7 +434,7 @@ function displayReviews(reviews) {
                         </div>
                         <div class="reviewer-details">
                             <h6>${review.reviewer_name}</h6>
-                            <small>${review.review_type} review</small>
+                            <small>${review.listing_title ? 'Property' : 'User'} review</small>
                         </div>
                     </div>
                     <div class="rating-stars">

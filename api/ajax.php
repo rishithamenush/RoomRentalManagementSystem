@@ -1563,7 +1563,7 @@ function submit_review() {
     // Insert review
     $insert_sql = "INSERT INTO reviews (by_user_id, target_user_id, listing_id, rating, comment, created_at) VALUES (?, ?, ?, ?, ?, NOW())";
     $insert_stmt = $conn->prepare($insert_sql);
-    $insert_stmt->bind_param("iiis", $by_user_id, $target_user_id, $listing_id, $rating, $comment);
+    $insert_stmt->bind_param("iiiis", $by_user_id, $target_user_id, $listing_id, $rating, $comment);
     
     if ($insert_stmt->execute()) {
         $review_id = $conn->insert_id;

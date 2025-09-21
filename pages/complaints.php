@@ -224,7 +224,16 @@
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
-            <h2 class="mb-4">Manage Complaints</h2>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0">
+                    <?php echo ($_SESSION['login_role'] == 'admin') ? 'Manage Complaints' : 'My Complaints'; ?>
+                </h2>
+                <?php if ($_SESSION['login_role'] == 'student'): ?>
+                <a href="?page=file_complaint" class="btn btn-primary btn-lg">
+                    <i class="fa fa-plus"></i> File New Complaint
+                </a>
+                <?php endif; ?>
+            </div>
         </div>
     </div>
 
@@ -234,7 +243,12 @@
             <div class="stat-card">
                 <div class="stat-number stat-total" id="total-complaints">
                     <?php 
-                    $total = $conn->query("SELECT COUNT(*) as count FROM complaints")->fetch_assoc()['count'];
+                    if ($_SESSION['login_role'] == 'student') {
+                        $student_id = $_SESSION['login_id'];
+                        $total = $conn->query("SELECT COUNT(*) as count FROM complaints WHERE by_student_id = $student_id")->fetch_assoc()['count'];
+                    } else {
+                        $total = $conn->query("SELECT COUNT(*) as count FROM complaints")->fetch_assoc()['count'];
+                    }
                     echo $total;
                     ?>
                 </div>
@@ -245,7 +259,11 @@
             <div class="stat-card">
                 <div class="stat-number stat-under-review" id="under-review-complaints">
                     <?php 
-                    $under_review = $conn->query("SELECT COUNT(*) as count FROM complaints WHERE status = 'under_review'")->fetch_assoc()['count'];
+                    if ($_SESSION['login_role'] == 'student') {
+                        $under_review = $conn->query("SELECT COUNT(*) as count FROM complaints WHERE by_student_id = $student_id AND status = 'under_review'")->fetch_assoc()['count'];
+                    } else {
+                        $under_review = $conn->query("SELECT COUNT(*) as count FROM complaints WHERE status = 'under_review'")->fetch_assoc()['count'];
+                    }
                     echo $under_review;
                     ?>
                 </div>
@@ -256,7 +274,11 @@
             <div class="stat-card">
                 <div class="stat-number stat-resolved" id="resolved-complaints">
                     <?php 
-                    $resolved = $conn->query("SELECT COUNT(*) as count FROM complaints WHERE status = 'resolved'")->fetch_assoc()['count'];
+                    if ($_SESSION['login_role'] == 'student') {
+                        $resolved = $conn->query("SELECT COUNT(*) as count FROM complaints WHERE by_student_id = $student_id AND status = 'resolved'")->fetch_assoc()['count'];
+                    } else {
+                        $resolved = $conn->query("SELECT COUNT(*) as count FROM complaints WHERE status = 'resolved'")->fetch_assoc()['count'];
+                    }
                     echo $resolved;
                     ?>
                 </div>
@@ -267,7 +289,11 @@
             <div class="stat-card">
                 <div class="stat-number stat-dismissed" id="rejected-complaints">
                     <?php 
-                    $rejected = $conn->query("SELECT COUNT(*) as count FROM complaints WHERE status = 'rejected'")->fetch_assoc()['count'];
+                    if ($_SESSION['login_role'] == 'student') {
+                        $rejected = $conn->query("SELECT COUNT(*) as count FROM complaints WHERE by_student_id = $student_id AND status = 'rejected'")->fetch_assoc()['count'];
+                    } else {
+                        $rejected = $conn->query("SELECT COUNT(*) as count FROM complaints WHERE status = 'rejected'")->fetch_assoc()['count'];
+                    }
                     echo $rejected;
                     ?>
                 </div>
@@ -287,6 +313,13 @@
 
     <div class="row" id="complaints-container">
         <?php
+        // Build query based on user role
+        $whereClause = "";
+        if ($_SESSION['login_role'] == 'student') {
+            $student_id = $_SESSION['login_id'];
+            $whereClause = "WHERE c.by_student_id = $student_id";
+        }
+        
         $complaints = $conn->query("SELECT c.*, 
                                           sp.full_name as student_name, sp.university,
                                           op.full_name as owner_name,
@@ -300,6 +333,7 @@
                                    LEFT JOIN listings l ON c.listing_id = l.id
                                    LEFT JOIN users u3 ON c.resolver_admin_id = u3.id
                                    LEFT JOIN admin_profiles ap ON u3.id = ap.user_id
+                                   $whereClause
                                    ORDER BY c.created_at DESC");
 
         if ($complaints->num_rows > 0):
@@ -372,17 +406,19 @@
                             <i class="fa fa-eye"></i> View Details
                         </button>
                         
-                        <?php if($complaint['status'] == 'under_review'): ?>
-                            <button class="btn-action btn-resolve" onclick="resolveComplaint(<?php echo $complaint['id'] ?>)">
-                                <i class="fa fa-check"></i> Resolve
-                            </button>
-                            <button class="btn-action btn-dismiss" onclick="rejectComplaint(<?php echo $complaint['id'] ?>)">
-                                <i class="fa fa-times"></i> Reject
-                            </button>
-                        <?php elseif($complaint['status'] == 'resolved'): ?>
-                            <button class="btn-action btn-reopen" onclick="reopenComplaint(<?php echo $complaint['id'] ?>)">
-                                <i class="fa fa-redo"></i> Reopen
-                            </button>
+                        <?php if ($_SESSION['login_role'] == 'admin'): ?>
+                            <?php if($complaint['status'] == 'under_review'): ?>
+                                <button class="btn-action btn-resolve" onclick="resolveComplaint(<?php echo $complaint['id'] ?>)">
+                                    <i class="fa fa-check"></i> Resolve
+                                </button>
+                                <button class="btn-action btn-dismiss" onclick="rejectComplaint(<?php echo $complaint['id'] ?>)">
+                                    <i class="fa fa-times"></i> Reject
+                                </button>
+                            <?php elseif($complaint['status'] == 'resolved'): ?>
+                                <button class="btn-action btn-reopen" onclick="reopenComplaint(<?php echo $complaint['id'] ?>)">
+                                    <i class="fa fa-redo"></i> Reopen
+                                </button>
+                            <?php endif; ?>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -395,8 +431,18 @@
         <div class="col-12">
             <div class="empty-state">
                 <i class="fa fa-exclamation-triangle"></i>
+                <?php if ($_SESSION['login_role'] == 'student'): ?>
+                <h4>No complaints filed yet</h4>
+                <p>You haven't filed any complaints. If you're experiencing issues with your accommodation, you can file a complaint.</p>
+                <div class="mt-3">
+                    <a href="?page=file_complaint" class="btn btn-primary btn-lg">
+                        <i class="fa fa-plus"></i> File Your First Complaint
+                    </a>
+                </div>
+                <?php else: ?>
                 <h4>No complaints found</h4>
                 <p>There are no complaints to review at the moment.</p>
+                <?php endif; ?>
             </div>
         </div>
         <?php endif; ?>
