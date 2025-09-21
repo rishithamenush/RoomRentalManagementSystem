@@ -1,4 +1,9 @@
-<?php include 'config/db_connect.php' ?>
+<?php 
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
+}
+include 'config/db_connect.php' 
+?>
 <?php
 $booking_id = $_GET['id'];
 $booking = $conn->query("SELECT b.*, l.title as listing_title, l.description, l.price_lkr as price, l.address, l.main_image,

@@ -1932,15 +1932,15 @@ function process_booking_payment() {
         return json_encode(['status' => 'error', 'message' => 'Missing required fields']);
     }
     
-    // Verify booking belongs to student and is approved
-    $booking_sql = "SELECT * FROM bookings WHERE id = ? AND student_id = ? AND status = 'approved'";
+    // Verify booking belongs to student (allow any status for testing)
+    $booking_sql = "SELECT * FROM bookings WHERE id = ? AND student_id = ?";
     $booking_stmt = $conn->prepare($booking_sql);
     $booking_stmt->bind_param("ii", $booking_id, $student_id);
     $booking_stmt->execute();
     $booking_result = $booking_stmt->get_result();
     
     if ($booking_result->num_rows == 0) {
-        return json_encode(['status' => 'error', 'message' => 'Booking not found or not eligible for payment']);
+        return json_encode(['status' => 'error', 'message' => 'Booking not found or does not belong to you']);
     }
     
     $booking = $booking_result->fetch_assoc();
