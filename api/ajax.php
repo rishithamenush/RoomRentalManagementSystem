@@ -1,5 +1,8 @@
 <?php
 ob_start();
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
+}
 $action = $_GET['action'];
 
 // Use new auth system for authentication actions
@@ -1915,11 +1918,10 @@ function transfer_bookings() {
 
 function process_booking_payment() {
     include '../config/db_connect.php';
-    session_start();
     
     // Check if user is logged in and is a student
     if (!isset($_SESSION['login_id']) || $_SESSION['login_role'] != 'student') {
-        return json_encode(['status' => 'error', 'message' => 'Access denied']);
+        return json_encode(['status' => 'error', 'message' => 'Access denied - Login ID: ' . ($_SESSION['login_id'] ?? 'not set') . ', Role: ' . ($_SESSION['login_role'] ?? 'not set')]);
     }
     
     $booking_id = $_POST['booking_id'] ?? 0;
@@ -1960,10 +1962,11 @@ function process_booking_payment() {
                               payment_status = 'completed',
                               payment_method = ?,
                               payment_date = NOW(),
+                              total_paid = ?,
                               updated_at = NOW()
                               WHERE id = ?";
         $update_stmt = $conn->prepare($update_booking_sql);
-        $update_stmt->bind_param("si", $payment_method, $booking_id);
+        $update_stmt->bind_param("sdi", $payment_method, $amount, $booking_id);
         
         if (!$update_stmt->execute()) {
             throw new Exception('Failed to update booking');
@@ -1972,13 +1975,22 @@ function process_booking_payment() {
         // Create payment record (if payments table exists)
         $payment_table_check = $conn->query("SHOW TABLES LIKE 'payments'");
         if ($payment_table_check && $payment_table_check->num_rows > 0) {
-            $payment_sql = "INSERT INTO payments (booking_id, student_id, amount, payment_method, payment_status, payment_date, created_at) 
-                           VALUES (?, ?, ?, ?, 'completed', NOW(), NOW())";
+            // Generate receipt number
+            $receipt_no = 'REC' . date('YmdHis') . $booking_id;
+            
+            $payment_sql = "INSERT INTO payments (booking_id, amount_lkr, method, paid_at, status, receipt_no, notes, created_at) 
+                           VALUES (?, ?, ?, NOW(), 'paid', ?, ?, NOW())";
             $payment_stmt = $conn->prepare($payment_sql);
-            $payment_stmt->bind_param("iids", $booking_id, $student_id, $amount, $payment_method);
+            
+            if (!$payment_stmt) {
+                throw new Exception('Failed to prepare payment statement: ' . $conn->error);
+            }
+            
+            $notes = "Payment for booking #$booking_id via $payment_method";
+            $payment_stmt->bind_param("idsss", $booking_id, $amount, $payment_method, $receipt_no, $notes);
             
             if (!$payment_stmt->execute()) {
-                throw new Exception('Failed to create payment record');
+                throw new Exception('Failed to create payment record: ' . $conn->error);
             }
         }
         

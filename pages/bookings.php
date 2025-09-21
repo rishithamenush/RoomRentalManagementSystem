@@ -85,7 +85,12 @@
                                         <td class="text-center"><?php echo $row['end_date'] ? date('M d, Y', strtotime($row['end_date'])) : 'N/A'; ?></td>
                                         <td class="text-center"><strong>LKR <?php echo number_format($row['total_amount'], 2); ?></strong></td>
                                         <td class="text-center">
-                                            <?php if($row['status'] == 'pending'): ?>
+                                            <?php 
+                                            $payment_status = $row['payment_status'] ?? 'not_required';
+                                            
+                                            if($row['status'] == 'confirmed' && $payment_status == 'completed'): ?>
+                                                <span class="badge badge-success">Paid</span>
+                                            <?php elseif($row['status'] == 'pending'): ?>
                                                 <span class="badge badge-warning">Pending</span>
                                             <?php elseif($row['status'] == 'approved'): ?>
                                                 <span class="badge badge-info">Approved</span>
@@ -102,7 +107,10 @@
                                                 <i class="fa fa-eye"></i> View
                                             </button>
                                             
-                                            <?php if($_SESSION['login_role'] == 'student' && $row['status'] == 'approved'): ?>
+                                            <?php 
+                                            $payment_status = $row['payment_status'] ?? 'not_required';
+                                            // Show Pay Now button only for approved bookings that haven't been paid yet
+                                            if($_SESSION['login_role'] == 'student' && $row['status'] == 'approved' && $payment_status != 'completed'): ?>
                                             <button class="btn btn-sm btn-success pay_now" type="button" 
                                                     data-booking-id="<?php echo $row['id']; ?>"
                                                     data-amount="<?php echo $row['total_amount']; ?>"
