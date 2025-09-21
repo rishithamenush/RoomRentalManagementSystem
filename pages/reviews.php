@@ -179,12 +179,18 @@ $user_role = $_SESSION['login_role'];
         font-weight: 600;
         text-decoration: none;
         display: inline-block;
-        transition: transform 0.2s ease;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
     }
     .btn-primary:hover {
         transform: translateY(-2px);
         color: white;
         text-decoration: none;
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+    .btn-lg {
+        padding: 15px 30px;
+        font-size: 1.1rem;
     }
     .review-form {
         background: white;
@@ -237,7 +243,12 @@ $user_role = $_SESSION['login_role'];
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
-            <h2 class="mb-4">Reviews</h2>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0">Reviews</h2>
+                <a href="#" class="btn btn-primary btn-lg" onclick="showReviewForm(); return false;">
+                    <i class="fa fa-star"></i> Write Review
+                </a>
+            </div>
         </div>
     </div>
 
@@ -277,7 +288,6 @@ $user_role = $_SESSION['login_role'];
         <?php if ($user_role == 'student'): ?>
         <button class="filter-tab" onclick="filterReviews('properties')">Property Reviews</button>
         <?php endif; ?>
-        <button class="filter-tab" onclick="showReviewForm()">Write Review</button>
     </div>
 
     <!-- Review Form (Hidden by default) -->
@@ -415,7 +425,23 @@ function loadReviews() {
 
 function displayReviews(reviews) {
     if (reviews.length === 0) {
-        $('#reviews-container').html('<div class="empty-state"><i class="fa fa-star"></i><h4>No reviews found</h4><p>No reviews match your current filter.</p></div>');
+        let emptyStateHtml = '<div class="empty-state"><i class="fa fa-star"></i>';
+        
+        if (currentFilter === 'all') {
+            emptyStateHtml += '<h4>No reviews yet</h4>';
+            emptyStateHtml += '<p>You haven\'t written or received any reviews yet. Share your experience by writing a review!</p>';
+            emptyStateHtml += '<div class="mt-3">';
+            emptyStateHtml += '<button class="btn btn-primary btn-lg" onclick="showReviewForm()">';
+            emptyStateHtml += '<i class="fa fa-star"></i> Write Your First Review';
+            emptyStateHtml += '</button>';
+            emptyStateHtml += '</div>';
+        } else {
+            emptyStateHtml += '<h4>No reviews found</h4>';
+            emptyStateHtml += '<p>No reviews match your current filter. Try selecting a different filter or write a new review.</p>';
+        }
+        
+        emptyStateHtml += '</div>';
+        $('#reviews-container').html(emptyStateHtml);
         return;
     }
     
